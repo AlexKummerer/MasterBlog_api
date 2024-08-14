@@ -78,5 +78,30 @@ def delete_post(post_id):
         return jsonify({"error": str(e)}), 500
 
 
+@app.route("/api/posts/<string:post_id>", methods=["PUT"])
+def update_post(post_id):
+    try:
+        post = next((post for post in post_list.posts if post.id == post_id), None)
+        if not post:
+            return jsonify({"error": "Post not found"}), 404
+
+        data = request.get_json()
+        if (
+            not data
+            or "title" not in data
+            or "content" not in data
+            or not data["title"]
+            or not data["content"]
+        ):
+            return jsonify({"error": "Missing title or content"}), 400
+
+        post.title = data["title"]
+        post.content = data["content"]
+
+        return jsonify(post.to_dict()), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5002, debug=True)
