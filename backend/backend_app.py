@@ -103,5 +103,24 @@ def update_post(post_id):
         return jsonify({"error": str(e)}), 500
 
 
+@app.route("/api/posts/search", methods=["GET"])
+def search_posts():
+    try:
+        query = request.args.get("query")
+        if not query:
+            return jsonify({"error": "Missing query parameter"}), 400
+
+        results = [
+            post.to_dict()
+            for post in post_list.posts
+            if query.lower() in post.title.lower()
+            or query.lower() in post.content.lower()
+        ]
+
+        return jsonify(results), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5002, debug=True)
