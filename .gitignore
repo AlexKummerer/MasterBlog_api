@@ -1,0 +1,28 @@
+# VS Code
+.vscode/
+
+# MacOS specific
+.DS_Store
+
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+
+# Virtual environments
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+venv/
+.venv/
+
+# Environments
+.env
+.envrc
+*.env
+*.env.*
