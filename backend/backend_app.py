@@ -1,24 +1,29 @@
 import uuid
+import os
 from flask_bcrypt import Bcrypt
 from flask_jwt_extended import (
     JWTManager,
     create_access_token,
     jwt_required,
-    get_jwt_identity,
 )
 from flask import Flask, jsonify, request
 from flask_cors import CORS
 from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
+from flasgger import Swagger, swag_from
 
 app = Flask(__name__)
-app.config["JWT_SECRET_KEY"] = "your_jwt_secret_key"
+app.config["JWT_SECRET_KEY"] = str(os.urandom(24))
 CORS(app)
 bcrypt = Bcrypt(app)
 jwt = JWTManager(app)
-limiter = Limiter(app, key_func=lambda: get_jwt_identity())
+limiter = Limiter(key_func=get_remote_address)
+limiter.init_app(app)
+swagger = Swagger(app)
 
 users = {}
 
+# Models
 
 class User:
     def __init__(self, username, password):
@@ -27,7 +32,6 @@ class User:
 
     def check_password(self, password):
         return bcrypt.check_password_hash(self.password, password)
-
 
 class Comment:
     def __init__(self, id, post_id, content):
@@ -38,7 +42,6 @@ class Comment:
     def to_dict(self):
         return {"id": self.id, "post_id": self.post_id, "content": self.content}
 
-
 class Category:
     def __init__(self, id, name):
         self.id = id
@@ -46,7 +49,6 @@ class Category:
 
     def to_dict(self):
         return {"id": self.id, "name": self.name}
-
 
 class Tag:
     def __init__(self, id, name):
@@ -56,14 +58,11 @@ class Tag:
     def to_dict(self):
         return {"id": self.id, "name": self.name}
 
-
 class PostNotFoundException(Exception):
     pass
 
-
 class InvalidDataException(Exception):
     pass
-
 
 class Post:
     def __init__(self, id, title, content, categories=None, tags=None):
@@ -99,6 +98,7 @@ class Post:
         self.tags.append(new_tag)
         return new_tag
 
+# Utility Functions
 
 def paginate_results(results, page, per_page, base_url, query_params=None):
     start = (page - 1) * per_page
@@ -107,7 +107,6 @@ def paginate_results(results, page, per_page, base_url, query_params=None):
 
     next_url = None
     if end < len(results):
-        # Construct the next_url with all query parameters
         query_params = query_params or {}
         query_params.update({"page": page + 1, "per_page": per_page})
         query_string = "&".join(
@@ -116,7 +115,6 @@ def paginate_results(results, page, per_page, base_url, query_params=None):
         next_url = f"{base_url}?{query_string}"
 
     return paginated_results, next_url
-
 
 class PostList:
     def __init__(self):
@@ -158,11 +156,37 @@ class PostList:
         ):
             raise InvalidDataException("Missing title or content")
 
-
 post_list = PostList()
 
+# Routes
 
 @app.route("/api/register", methods=["POST"])
+@swag_from(
+    {
+        "summary": "Register a new user",
+        "description": "Create a new user account by providing a username and password.",
+        "parameters": [
+            {
+                "name": "body",
+                "in": "body",
+                "required": True,
+                "schema": {
+                    "type": "object",
+                    "properties": {
+                        "username": {"type": "string", "example": "john_doe"},
+                        "password": {"type": "string", "example": "password123"},
+                    },
+                    "required": ["username", "password"],
+                },
+            }
+        ],
+        "responses": {
+            201: {"description": "User registered successfully"},
+            400: {"description": "User already exists or missing username/password"},
+            500: {"description": "Server error"},
+        },
+    }
+)
 def register():
     try:
         data = request.get_json()
@@ -181,6 +205,39 @@ def register():
 
 
 @app.route("/api/login", methods=["POST"])
+@swag_from(
+    {
+        "summary": "Login a user and return a JWT token",
+        "description": "This endpoint allows a user to log in by providing a valid username and password.",
+        "parameters": [
+            {
+                "name": "body",
+                "in": "body",
+                "required": True,
+                "schema": {
+                    "type": "object",
+                    "properties": {
+                        "username": {"type": "string", "example": "john_doe"},
+                        "password": {"type": "string", "example": "password123"},
+                    },
+                    "required": ["username", "password"],
+                },
+            }
+        ],
+        "responses": {
+            200: {
+                "description": "User logged in successfully",
+                "schema": {
+                    "type": "object",
+                    "properties": {"access_token": {"type": "string"}},
+                },
+            },
+            400: {"description": "Missing username/password"},
+            401: {"description": "Invalid credentials"},
+            500: {"description": "Server error"},
+        },
+    }
+)
 def login():
     try:
         data = request.get_json()
@@ -203,6 +260,47 @@ def login():
 @app.route("/api/v1/posts", methods=["GET"])
 @jwt_required()
 @limiter.limit("5 per minute")
+@swag_from(
+    {
+        "summary": "Get a list of posts",
+        "description": "Retrieve a paginated list of posts. Requires JWT authentication.",
+        "parameters": [
+            {
+                "name": "page",
+                "in": "query",
+                "type": "integer",
+                "required": False,
+                "default": 1,
+                "description": "Page number for pagination",
+            },
+            {
+                "name": "per_page",
+                "in": "query",
+                "type": "integer",
+                "required": False,
+                "default": 10,
+                "description": "Number of posts per page",
+            },
+        ],
+        "responses": {
+            200: {
+                "description": "A list of paginated posts",
+                "schema": {
+                    "type": "object",
+                    "properties": {
+                        "results": {
+                            "type": "array",
+                            "items": {"type": "object"},
+                        },
+                        "next_url": {"type": "string"},
+                    },
+                },
+            },
+            400: {"description": "Invalid pagination parameters"},
+            500: {"description": "Server error"},
+        },
+    }
+)
 def get_posts():
     try:
         page = int(request.args.get("page", 1))
@@ -228,6 +326,32 @@ def get_posts():
 
 @app.route("/api/v1/posts", methods=["POST"])
 @jwt_required()
+@swag_from(
+    {
+        "summary": "Create a new post",
+        "description": "Create a new post. Requires JWT authentication.",
+        "parameters": [
+            {
+                "name": "body",
+                "in": "body",
+                "schema": {
+                    "properties": {
+                        "title": {"type": "string", "required": True},
+                        "content": {"type": "string", "required": True},
+                    },
+                },
+            }
+        ],
+        "responses": {
+            201: {
+                "description": "Post created successfully",
+                "schema": {"type": "object", "properties": {"id": {"type": "string"}}},
+            },
+            400: {"description": "Missing title or content"},
+            500: {"description": "Server error"},
+        },
+    }
+)
 def create_post():
     try:
         data = request.get_json()
@@ -242,6 +366,20 @@ def create_post():
 
 @app.route("/api/v1/posts/<string:post_id>", methods=["DELETE"])
 @jwt_required()
+@swag_from(
+    {
+        "summary": "Delete a post",
+        "description": "Delete a post by ID. Requires JWT authentication.",
+        "parameters": [
+            {"name": "post_id", "in": "path", "type": "string", "required": True}
+        ],
+        "responses": {
+            200: {"description": "Post deleted successfully"},
+            404: {"description": "Post not found"},
+            500: {"description": "Server error"},
+        },
+    }
+)
 def delete_post(post_id):
     try:
         post = next((post for post in post_list.posts if post.id == post_id), None)
@@ -257,6 +395,32 @@ def delete_post(post_id):
 
 @app.route("/api/v1/posts/<string:post_id>", methods=["PUT"])
 @jwt_required()
+@swag_from(
+    {
+        "summary": "Update a post",
+        "description": "Update a post by ID. Requires JWT authentication.",
+        "parameters": [
+            {"name": "post_id", "in": "path", "type": "string", "required": True},
+            {
+                "name": "body",
+                "in": "body",
+                "schema": {
+                    "properties": {
+                        "title": {"type": "string", "required": True},
+                        "content": {"type": "string", "required": True},
+                    },
+                    "required": ["title", "content"],
+                },
+            },
+        ],
+        "responses": {
+            200: {"description": "Post updated successfully"},
+            404: {"description": "Post not found"},
+            400: {"description": "Invalid data provided"},
+            500: {"description": "Server error"},
+        },
+    }
+)
 def update_post(post_id):
     try:
         post = next((post for post in post_list.posts if post.id == post_id), None)
@@ -277,6 +441,48 @@ def update_post(post_id):
 
 @app.route("/api/v1/posts/search", methods=["GET"])
 @jwt_required()
+@swag_from(
+    {
+        "summary": "Search for posts",
+        "description": "Search posts by query string. Requires JWT authentication.",
+        "parameters": [
+            {"name": "query", "in": "query", "type": "string", "required": True},
+            {
+                "name": "page",
+                "in": "query",
+                "type": "integer",
+                "required": False,
+                "default": 1,
+                "description": "Page number for pagination",
+            },
+            {
+                "name": "per_page",
+                "in": "query",
+                "type": "integer",
+                "required": False,
+                "default": 10,
+                "description": "Number of posts per page",
+            },
+        ],
+        "responses": {
+            200: {
+                "description": "A list of paginated search results",
+                "schema": {
+                    "type": "object",
+                    "properties": {
+                        "results": {
+                            "type": "array",
+                            "items": {"type": "object"},
+                        },
+                        "next_url": {"type": "string"},
+                    },
+                },
+            },
+            400: {"description": "Invalid pagination parameters"},
+            500: {"description": "Server error"},
+        },
+    }
+)
 def search_posts():
     try:
         query = request.args.get("query")
@@ -306,6 +512,64 @@ def search_posts():
 
 @app.route("/api/v1/posts/sort", methods=["GET"])
 @jwt_required()
+@swag_from(
+    {
+        "summary": "Sort posts",
+        "description": "Sort posts by a specified field (title or content) and order. Requires JWT authentication.",
+        "parameters": [
+            {
+                "name": "sort_by",
+                "in": "query",
+                "type": "string",
+                "required": False,
+                "enum": ["title", "content"],
+                "description": "Field to sort by (title or content)",
+            },
+            {
+                "name": "direction",
+                "in": "query",
+                "type": "string",
+                "required": False,
+                "enum": ["asc", "desc"],
+                "default": "asc",
+                "description": "Sort direction (ascending or descending)",
+            },
+            {
+                "name": "page",
+                "in": "query",
+                "type": "integer",
+                "required": False,
+                "default": 1,
+                "description": "Page number for pagination",
+            },
+            {
+                "name": "per_page",
+                "in": "query",
+                "type": "integer",
+                "required": False,
+                "default": 10,
+                "description": "Number of posts per page",
+            },
+        ],
+        "responses": {
+            200: {
+                "description": "A list of sorted and paginated posts",
+                "schema": {
+                    "type": "object",
+                    "properties": {
+                        "results": {
+                            "type": "array",
+                            "items": {"type": "object"},
+                        },
+                        "next_url": {"type": "string"},
+                    },
+                },
+            },
+            400: {"description": "Invalid parameters provided"},
+            500: {"description": "Server error"},
+        },
+    }
+)
 def sort_posts():
     try:
         sort_by = request.args.get("sort_by")
