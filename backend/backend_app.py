@@ -3,17 +3,63 @@ from flask import Flask, jsonify, request
 from flask_cors import CORS
 
 app = Flask(__name__)
-CORS(app)  # This will enable CORS for all routes
+CORS(app)
 
 
-class Post:
-    def __init__(self, id, title, content):
+class Comment:
+    def __init__(self, id, post_id, content):
         self.id = id
-        self.title = title
+        self.post_id = post_id
         self.content = content
 
     def to_dict(self):
-        return {"id": self.id, "title": self.title, "content": self.content}
+        return {"id": self.id, "post_id": self.post_id, "content": self.content}
+
+
+class Category:
+    def __init__(self, id, name):
+        self.id = id
+        self.name = name
+
+    def to_dict(self):
+        return {"id": self.id, "name": self.name}
+
+
+class Tag:
+    def __init__(self, id, name):
+        self.id = id
+        self.name = name
+
+    def to_dict(self):
+        return {"id": self.id, "name": self.name}
+
+
+class PostNotFoundException(Exception):
+    pass
+
+
+class InvalidDataException(Exception):
+    pass
+
+
+class Post:
+    def __init__(self, id, title, content, categories=None, tags=None):
+        self.id = id
+        self.title = title
+        self.content = content
+        self.comments = []
+        self.categories = categories if categories else []
+        self.tags = tags if tags else []
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "title": self.title,
+            "content": self.content,
+            "comments": [comment.to_dict() for comment in self.comments],
+            "categories": [category.to_dict() for category in self.categories],
+            "tags": [tag.to_dict() for tag in self.tags],
+        }
 
 
 class PostList:
@@ -26,28 +72,27 @@ class PostList:
     def get_all(self):
         return [post.to_dict() for post in self.posts]
 
-    def add_post(self, title, content):
+    def add_post(self, title, content, categories=None, tags=None):
         new_id = uuid.uuid4().hex
-        new_post = Post(new_id, title, content)
+        new_post = Post(new_id, title, content, categories, tags)
         self.posts.append(new_post)
         return new_post
 
-    def get_next_id(self):
-        return str(int(max(post.id for post in self.posts)) + 1)
+    def sort_posts(self, sort_by=None, direction="asc"):
+        if sort_by:
+            if sort_by not in ["title", "content"]:
+                raise InvalidDataException("Invalid sort_by parameter")
+            if direction not in ["asc", "desc"]:
+                raise InvalidDataException("Invalid direction parameter")
+            return sorted(
+                self.posts,
+                key=lambda post: getattr(post, sort_by),
+                reverse=direction == "desc",
+            )
+        return self.posts
 
-
-post_list = PostList()
-
-
-@app.route("/api/posts", methods=["GET"])
-def get_posts():
-    return jsonify(post_list.get_all())
-
-
-@app.route("/api/posts", methods=["POST"])
-def create_post():
-    try:
-        data = request.get_json()
+    @staticmethod
+    def validate_post_data(data):
         if (
             not data
             or "title" not in data
@@ -55,11 +100,37 @@ def create_post():
             or not data["title"]
             or not data["content"]
         ):
-            return jsonify({"error": "Missing title or content"}), 400
+            raise InvalidDataException("Missing title or content")
 
+
+post_list = PostList()
+
+
+@app.route("/api/posts", methods=["GET"])
+def get_posts():
+    try:
+        page = int(request.args.get("page", 1))
+        per_page = int(request.args.get("per_page", 10))
+
+        start = (page - 1) * per_page
+        end = start + per_page
+
+        paginated_posts = post_list.get_all()[start:end]
+
+        return jsonify(paginated_posts), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/posts", methods=["POST"])
+def create_post():
+    try:
+        data = request.get_json()
+        post_list.validate_post_data(data)
         new_post = post_list.add_post(data["title"], data["content"])
-
         return jsonify(new_post.to_dict()), 201
+    except InvalidDataException as e:
+        return jsonify({"error": str(e)}), 400
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -69,11 +140,11 @@ def delete_post(post_id):
     try:
         post = next((post for post in post_list.posts if post.id == post_id), None)
         if not post:
-            return jsonify({"error": "Post not found"}), 404
-
+            raise PostNotFoundException("Post not found")
         post_list.posts = [post for post in post_list.posts if post.id != post_id]
-
         return jsonify({"message": "Post deleted"}), 200
+    except PostNotFoundException as e:
+        return jsonify({"error": str(e)}), 404
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -83,22 +154,16 @@ def update_post(post_id):
     try:
         post = next((post for post in post_list.posts if post.id == post_id), None)
         if not post:
-            return jsonify({"error": "Post not found"}), 404
-
+            raise PostNotFoundException("Post not found")
         data = request.get_json()
-        if (
-            not data
-            or "title" not in data
-            or "content" not in data
-            or not data["title"]
-            or not data["content"]
-        ):
-            return jsonify({"error": "Missing title or content"}), 400
-
+        post_list.validate_post_data(data)
         post.title = data["title"]
         post.content = data["content"]
-
         return jsonify(post.to_dict()), 200
+    except PostNotFoundException as e:
+        return jsonify({"error": str(e)}), 404
+    except InvalidDataException as e:
+        return jsonify({"error": str(e)}), 400
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -109,15 +174,26 @@ def search_posts():
         query = request.args.get("query")
         if not query:
             return jsonify({"error": "Missing query parameter"}), 400
-
         results = [
             post.to_dict()
             for post in post_list.posts
             if query.lower() in post.title.lower()
             or query.lower() in post.content.lower()
         ]
-
         return jsonify(results), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/posts/sort", methods=["GET"])
+def sort_posts():
+    try:
+        sort_by = request.args.get("sort_by")
+        direction = request.args.get("direction", "asc")
+        sorted_posts = post_list.sort_posts(sort_by, direction)
+        return jsonify([post.to_dict() for post in sorted_posts]), 200
+    except InvalidDataException as e:
+        return jsonify({"error": str(e)}), 400
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
