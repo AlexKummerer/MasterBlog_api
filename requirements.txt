@@ -1,2 +1,4 @@
 flask==3.0.3
 flask-restful==4.0.1
+flask_bcrypt==1.0.1
+flask_jwt_extended==4.6.0

@@ -1,9 +1,29 @@
 import uuid
+from flask_bcrypt import Bcrypt
+from flask_jwt_extended import (
+    JWTManager,
+    create_access_token,
+    jwt_required,
+    get_jwt_identity,
+)
 from flask import Flask, jsonify, request
 from flask_cors import CORS
 
 app = Flask(__name__)
 CORS(app)
+bcrypt = Bcrypt(app)
+jwt = JWTManager(app)
+
+users = {}
+
+
+class User:
+    def __init__(self, username, password):
+        self.username = username
+        self.password = bcrypt.generate_password_hash(password).decode("utf-8")
+
+    def check_password(self, password):
+        return bcrypt.check_password_hash(self.password, password)
 
 
 class Comment:
@@ -106,7 +126,31 @@ class PostList:
 post_list = PostList()
 
 
+@app.route("/api/register", methods=["POST"])
+def register():
+    data = request.get_json()
+    username = data["username"]
+    password = data["password"]
+    if username in users:
+        return jsonify({"error": "User already exists"}), 400
+    users[username] = User(username, password)
+    return jsonify({"message": "User registered successfully"}), 201
+
+
+@app.route("/api/login", methods=["POST"])
+def login():
+    data = request.get_json()
+    username = data["username"]
+    password = data["password"]
+    user = users.get(username)
+    if user and user.check_password(password):
+        access_token = create_access_token(identity=username)
+        return jsonify(access_token=access_token), 200
+    return jsonify({"error": "Invalid credentials"}), 401
+
+
 @app.route("/api/posts", methods=["GET"])
+@jwt_required()
 def get_posts():
     try:
         page = int(request.args.get("page", 1))
@@ -123,6 +167,7 @@ def get_posts():
 
 
 @app.route("/api/posts", methods=["POST"])
+@jwt_required()
 def create_post():
     try:
         data = request.get_json()
@@ -136,6 +181,7 @@ def create_post():
 
 
 @app.route("/api/posts/<string:post_id>", methods=["DELETE"])
+@jwt_required()
 def delete_post(post_id):
     try:
         post = next((post for post in post_list.posts if post.id == post_id), None)
@@ -150,6 +196,7 @@ def delete_post(post_id):
 
 
 @app.route("/api/posts/<string:post_id>", methods=["PUT"])
+@jwt_required()
 def update_post(post_id):
     try:
         post = next((post for post in post_list.posts if post.id == post_id), None)
@@ -169,6 +216,7 @@ def update_post(post_id):
 
 
 @app.route("/api/posts/search", methods=["GET"])
+@jwt_required()
 def search_posts():
     try:
         query = request.args.get("query")
@@ -186,6 +234,7 @@ def search_posts():
 
 
 @app.route("/api/posts/sort", methods=["GET"])
+@jwt_required()
 def sort_posts():
     try:
         sort_by = request.args.get("sort_by")
