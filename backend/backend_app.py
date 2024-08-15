@@ -1,6 +1,7 @@
-from datetime import UTC, datetime
 import uuid
 import os
+import json
+from datetime import datetime
 from flask_bcrypt import Bcrypt
 from flask_jwt_extended import (
     JWTManager,
@@ -23,6 +24,9 @@ limiter.init_app(app)
 swagger = Swagger(app)
 
 users = {}
+
+POSTS_FILE = "posts.json"  # File to store posts
+
 
 # Models
 
@@ -80,7 +84,7 @@ class Post:
         self.title = title
         self.content = content
         self.author = author
-        self.date = date if date else datetime.now(UTC).isoformat()
+        self.date = date if date else datetime.utcnow().isoformat()
         self.comments = []
         self.categories = categories if categories else []
         self.tags = tags if tags else []
@@ -113,32 +117,24 @@ class Post:
         return new_tag
 
 
-# Utility Functions
-
-
-def paginate_results(results, page, per_page, base_url, query_params=None):
-    start = (page - 1) * per_page
-    end = start + per_page
-    paginated_results = results[start:end]
-
-    next_url = None
-    if end < len(results):
-        query_params = query_params or {}
-        query_params.update({"page": page + 1, "per_page": per_page})
-        query_string = "&".join(
-            [f"{key}={value}" for key, value in query_params.items()]
-        )
-        next_url = f"{base_url}?{query_string}"
-
-    return paginated_results, next_url
-
-
 class PostList:
-    def __init__(self):
-        self.posts = [
-            Post("1", "First post", "This is the first post.", "Alice"),
-            Post("2", "Second post", "This is the second post.", "Bob"),
-        ]
+    def __init__(self, file_path=POSTS_FILE):
+        self.file_path = file_path
+        self.posts = self.load_posts()
+
+    def load_posts(self):
+        if os.path.exists(self.file_path):
+            try:
+                with open(self.file_path, "r") as file:
+                    posts_data = json.load(file)
+                    return [Post(**post_data) for post_data in posts_data]
+            except (IOError, json.JSONDecodeError):
+                return []
+        return []
+
+    def save_posts(self):
+        with open(self.file_path, "w") as file:
+            json.dump([post.to_dict() for post in self.posts], file, indent=4)
 
     def get_all(self):
         return [post.to_dict() for post in self.posts]
@@ -149,7 +145,30 @@ class PostList:
             new_id, title, content, author, categories=categories, tags=tags
         )
         self.posts.append(new_post)
+        self.save_posts()
         return new_post
+
+    def find_post_by_id(self, post_id):
+        return next((post for post in self.posts if post.id == post_id), None)
+
+    def delete_post(self, post_id):
+        post = self.find_post_by_id(post_id)
+        if post:
+            self.posts = [post for post in self.posts if post.id != post_id]
+            self.save_posts()
+            return post
+        raise PostNotFoundException(f"Post with ID {post_id} not found")
+
+    def update_post(self, post_id, title, content, author):
+        post = self.find_post_by_id(post_id)
+        if post:
+            post.title = title
+            post.content = content
+            post.author = author
+            post.date = datetime.utcnow().isoformat()  # Update the date when editing
+            self.save_posts()
+            return post
+        raise PostNotFoundException(f"Post with ID {post_id} not found")
 
     def sort_posts(self, sort_by=None, direction="asc"):
         if sort_by:
@@ -176,6 +195,23 @@ class PostList:
             or not data["author"]
         ):
             raise InvalidDataException("Missing title, content, or author")
+
+
+def paginate_results(results, page, per_page, base_url, query_params=None):
+    start = (page - 1) * per_page
+    end = start + per_page
+    paginated_results = results[start:end]
+
+    next_url = None
+    if end < len(results):
+        query_params = query_params or {}
+        query_params.update({"page": page + 1, "per_page": per_page})
+        query_string = "&".join(
+            [f"{key}={value}" for key, value in query_params.items()]
+        )
+        next_url = f"{base_url}?{query_string}"
+
+    return paginated_results, next_url
 
 
 post_list = PostList()
@@ -289,6 +325,13 @@ def login():
         "description": "Retrieve a paginated list of posts. Requires JWT authentication.",
         "parameters": [
             {
+                "name": "Authorization",
+                "in": "header",
+                "type": "string",
+                "required": True,
+                "description": "JWT token for authorization in the format Bearer <token>",
+            },
+            {
                 "name": "page",
                 "in": "query",
                 "type": "integer",
@@ -355,6 +398,13 @@ def get_posts():
         "description": "Create a new post. Requires JWT authentication.",
         "parameters": [
             {
+                "name": "Authorization",
+                "in": "header",
+                "type": "string",
+                "required": True,
+                "description": "JWT token for authorization in the format Bearer <token>",
+            },
+            {
                 "name": "body",
                 "in": "body",
                 "schema": {
@@ -364,7 +414,7 @@ def get_posts():
                         "author": {"type": "string", "required": True},
                     },
                 },
-            }
+            },
         ],
         "responses": {
             201: {
@@ -395,7 +445,14 @@ def create_post():
         "summary": "Delete a post",
         "description": "Delete a post by ID. Requires JWT authentication.",
         "parameters": [
-            {"name": "post_id", "in": "path", "type": "string", "required": True}
+            {
+                "name": "Authorization",
+                "in": "header",
+                "type": "string",
+                "required": True,
+                "description": "JWT token for authorization in the format Bearer <token>",
+            },
+            {"name": "post_id", "in": "path", "type": "string", "required": True},
         ],
         "responses": {
             200: {"description": "Post deleted successfully"},
@@ -406,10 +463,7 @@ def create_post():
 )
 def delete_post(post_id):
     try:
-        post = next((post for post in post_list.posts if post.id == post_id), None)
-        if not post:
-            raise PostNotFoundException("Post not found")
-        post_list.posts = [post for post in post_list.posts if post.id != post_id]
+        post_list.delete_post(post_id)
         return jsonify({"message": "Post deleted"}), 200
     except PostNotFoundException as e:
         return jsonify({"error": str(e)}), 404
@@ -424,6 +478,13 @@ def delete_post(post_id):
         "summary": "Update a post",
         "description": "Update a post by ID. Requires JWT authentication.",
         "parameters": [
+            {
+                "name": "Authorization",
+                "in": "header",
+                "type": "string",
+                "required": True,
+                "description": "JWT token for authorization in the format Bearer <token>",
+            },
             {"name": "post_id", "in": "path", "type": "string", "required": True},
             {
                 "name": "body",
@@ -448,16 +509,12 @@ def delete_post(post_id):
 )
 def update_post(post_id):
     try:
-        post = next((post for post in post_list.posts if post.id == post_id), None)
-        if not post:
-            raise PostNotFoundException("Post not found")
         data = request.get_json()
         post_list.validate_post_data(data)
-        post.title = data["title"]
-        post.content = data["content"]
-        post.author = data["author"]
-        post.date = datetime.utcnow().isoformat()  # Update the date when editing
-        return jsonify(post.to_dict()), 200
+        updated_post = post_list.update_post(
+            post_id, data["title"], data["content"], data["author"]
+        )
+        return jsonify(updated_post.to_dict()), 200
     except PostNotFoundException as e:
         return jsonify({"error": str(e)}), 404
     except InvalidDataException as e:
@@ -473,6 +530,13 @@ def update_post(post_id):
         "summary": "Search for posts",
         "description": "Search posts by query string. Requires JWT authentication.",
         "parameters": [
+            {
+                "name": "Authorization",
+                "in": "header",
+                "type": "string",
+                "required": True,
+                "description": "JWT token for authorization in the format Bearer <token>",
+            },
             {"name": "query", "in": "query", "type": "string", "required": True},
             {
                 "name": "page",
@@ -545,6 +609,13 @@ def search_posts():
         "summary": "Sort posts",
         "description": "Sort posts by a specified field (title, content, author, or date) and order. Requires JWT authentication.",
         "parameters": [
+            {
+                "name": "Authorization",
+                "in": "header",
+                "type": "string",
+                "required": True,
+                "description": "JWT token for authorization in the format Bearer <token>",
+            },
             {
                 "name": "sort_by",
                 "in": "query",
