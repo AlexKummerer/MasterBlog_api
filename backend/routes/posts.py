@@ -1,78 +1,101 @@
-# routes/posts.py
+"""
+    module for posts CRUD operations
+
+    This module contains routes for creating, reading, updating, and deleting posts.
+    It also contains routes for searching and sorting posts.
+    
+"""
+
 from flask import Blueprint, jsonify, request
 from flask_jwt_extended import jwt_required
 from flasgger import swag_from
-from models import PostList, InvalidDataException, PostNotFoundException
-from routes.utils import paginate_results
+from backend.models import PostList, InvalidDataException, PostNotFoundException
+from backend.routes.utils import paginate_results
 
-posts_bp = Blueprint('posts', __name__)
+posts_bp = Blueprint("posts", __name__)
 
 post_list = PostList()
 
+
 @posts_bp.route("/api/v1/posts", methods=["GET"])
 @jwt_required()
-@swag_from({
-    "summary": "Get a list of posts",
-    "description": "Retrieve a paginated list of posts. Requires JWT authentication.",
-    "parameters": [
-        {
-            "name": "Authorization",
-            "in": "header",
-            "type": "string",
-            "required": True,
-            "description": "JWT token for authorization in the format Bearer <token>",
-        },
-        {
-            "name": "page",
-            "in": "query",
-            "type": "integer",
-            "required": False,
-            "default": 1,
-            "description": "Page number for pagination",
-        },
-        {
-            "name": "per_page",
-            "in": "query",
-            "type": "integer",
-            "required": False,
-            "default": 10,
-            "description": "Number of posts per page",
-        },
-    ],
-    "responses": {
-        200: {
-            "description": "A list of paginated posts",
-            "schema": {
-                "type": "object",
-                "properties": {
-                    "results": {
-                        "type": "array",
-                        "items": {"type": "object"},
+@swag_from(
+    {
+        "summary": "Get a list of posts",
+        "description": "Retrieve a paginated list of posts. Requires JWT authentication.",
+        "parameters": [
+            {
+                "name": "Authorization",
+                "in": "header",
+                "type": "string",
+                "required": True,
+                "description": "JWT token for authorization in the format Bearer <token>",
+            },
+            {
+                "name": "page",
+                "in": "query",
+                "type": "integer",
+                "required": False,
+                "default": 1,
+                "description": "Page number for pagination",
+            },
+            {
+                "name": "per_page",
+                "in": "query",
+                "type": "integer",
+                "required": False,
+                "default": 10,
+                "description": "Number of posts per page",
+            },
+        ],
+        "responses": {
+            200: {
+                "description": "A list of paginated posts",
+                "schema": {
+                    "type": "object",
+                    "properties": {
+                        "results": {
+                            "type": "array",
+                            "items": {"type": "object"},
+                        },
+                        "next_url": {"type": "string"},
                     },
-                    "next_url": {"type": "string"},
                 },
             },
+            400: {"description": "Invalid pagination parameters"},
+            500: {"description": "Server error"},
         },
-        400: {"description": "Invalid pagination parameters"},
-        500: {"description": "Server error"},
-    },
-})
-def get_posts():
+    }
+)
+def get_posts() -> str:
+    """
+    Get a list of posts
+
+    Returns:
+        str: A JSON response containing a list of paginated posts
+    """
     try:
         page = int(request.args.get("page", 1))
         per_page = int(request.args.get("per_page", 10))
 
         if page < 1 or per_page < 1:
-            return jsonify({"error": "Page and per_page must be positive integers"}), 400
+            return (
+                jsonify({"error": "Page and per_page must be positive integers"}),
+                400,
+            )
 
         results = post_list.get_all()
-        paginated_posts, next_url = paginate_results(results, page, per_page, request.base_url)
+        paginated_posts, next_url = paginate_results(
+            results, page, per_page, request.base_url
+        )
 
         return jsonify({"results": paginated_posts, "next_url": next_url}), 200
     except ValueError:
         return jsonify({"error": "Page and per_page must be integers"}), 400
+    # pylint: disable=broad-exception-caught
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
 
 @posts_bp.route("/api/v1/posts", methods=["POST"])
 @jwt_required()
@@ -110,7 +133,13 @@ def get_posts():
         },
     }
 )
-def create_post():
+def create_post() -> str:
+    """
+    Create a new post
+
+    Returns:
+        str: A JSON response containing the newly created post
+    """
     try:
         data = request.get_json()
         post_list.validate_post_data(data)
@@ -118,6 +147,7 @@ def create_post():
         return jsonify(new_post.to_dict()), 201
     except InvalidDataException as e:
         return jsonify({"error": str(e)}), 400
+        # pylint: disable=broad-exception-caught
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -145,15 +175,24 @@ def create_post():
         },
     }
 )
-def delete_post(post_id):
+def delete_post(post_id: str) -> str:
+    """
+    Delete a post
+
+    Args:
+        post_id (str):  post id
+
+    Returns:
+        str: A JSON response indicating the success or failure of the deletion
+    """
     try:
         post_list.delete_post(post_id)
         return jsonify({"message": "Post deleted"}), 200
     except PostNotFoundException as e:
         return jsonify({"error": str(e)}), 404
+    # pylint: disable=broad-exception-caught
     except Exception as e:
         return jsonify({"error": str(e)}), 500
-
 
 
 @posts_bp.route("/api/v1/posts/<string:post_id>", methods=["PUT"])
@@ -192,7 +231,16 @@ def delete_post(post_id):
         },
     }
 )
-def update_post(post_id):
+def update_post(post_id: str) -> str:
+    """
+    Update a post
+
+    Args:
+        post_id (str):  post id
+
+    Returns:
+        str: A JSON response containing the updated post
+    """
     try:
         data = request.get_json()
         post_list.validate_post_data(data)
@@ -204,6 +252,7 @@ def update_post(post_id):
         return jsonify({"error": str(e)}), 404
     except InvalidDataException as e:
         return jsonify({"error": str(e)}), 400
+    # pylint: disable=broad-exception-caught
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -259,7 +308,13 @@ def update_post(post_id):
         },
     }
 )
-def search_posts():
+def search_posts() -> str:
+    """
+    Search for posts
+
+    Returns:
+        str: A JSON response containing a list of paginated search results
+    """
     try:
         query = request.args.get("query")
         page = int(request.args.get("page", 1))
@@ -283,6 +338,7 @@ def search_posts():
         return jsonify({"results": paginated_results, "next_url": next_url}), 200
     except ValueError:
         return jsonify({"error": "Page and per_page must be integers"}), 400
+    # pylint: disable=broad-exception-caught
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -354,7 +410,14 @@ def search_posts():
         },
     }
 )
-def sort_posts():
+def sort_posts() -> str:
+    """
+    Sort posts
+
+    Returns:
+        str: A JSON response containing a list of sorted and paginated posts
+
+    """
     try:
         sort_by = request.args.get("sort_by")
         direction = request.args.get("direction", "asc")
@@ -373,5 +436,6 @@ def sort_posts():
         return jsonify({"results": paginated_results, "next_url": next_url}), 200
     except InvalidDataException as e:
         return jsonify({"error": f"Invalid parameters: {str(e)}"}), 400
+    # pylint: disable=broad-exception-caught
     except Exception as e:
         return jsonify({"error": str(e)}), 500

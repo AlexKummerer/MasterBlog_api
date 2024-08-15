@@ -1,4 +1,5 @@
-# app.py
+""" Main application file for the backend. """
+
 import os
 from flask import Flask
 from flask_bcrypt import Bcrypt
@@ -7,8 +8,8 @@ from flask_cors import CORS
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from flasgger import Swagger
-from routes.auth import auth_bp
-from routes.posts import posts_bp
+from backend.routes.auth import auth_bp
+from backend.routes.posts import posts_bp
 
 app = Flask(__name__)
 app.config["JWT_SECRET_KEY"] = str(os.urandom(24))

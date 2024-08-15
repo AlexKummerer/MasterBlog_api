@@ -1,13 +1,16 @@
-# routes/auth.py
-from flask import Blueprint, jsonify, request
+""" module for user authentication """
+
+from flask import Blueprint, app, jsonify, request
 from flask_jwt_extended import create_access_token
 from flasgger import swag_from
-from models import User
+from flask_bcrypt import Bcrypt
+from backend.models import User
 
 
-auth_bp = Blueprint('auth', __name__)
-
+auth_bp = Blueprint("auth", __name__)
+bcrypt = Bcrypt(app)
 users = {}
+
 
 @auth_bp.route("/api/register", methods=["POST"])
 @swag_from(
@@ -36,7 +39,13 @@ users = {}
         },
     }
 )
-def register():
+def register() -> str:
+    """
+    Register a new user
+
+    Returns:
+        str: A message indicating the success or failure of the registration
+    """
     try:
         data = request.get_json()
         username = data.get("username")
@@ -47,8 +56,13 @@ def register():
         if username in users:
             return jsonify({"error": "User already exists"}), 400
 
-        users[username] = User(username, password)
+        users[username] = User(username, password, bcrypt=bcrypt)
         return jsonify({"message": "User registered successfully"}), 201
+    except KeyError as ke:
+        return jsonify({"error": f"Missing key: {str(ke)}"}), 400
+    except TypeError as te:
+        return jsonify({"error": f"Invalid input format: {str(te)}"}), 400
+    # pylint: disable=broad-exception-caught
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -57,7 +71,8 @@ def register():
 @swag_from(
     {
         "summary": "Login a user and return a JWT token",
-        "description": "This endpoint allows a user to log in by providing a valid username and password.",
+        "description": "This endpoint allows a user to log in by"
+        + "providing a valid username and password.",
         "parameters": [
             {
                 "name": "body",
@@ -87,7 +102,13 @@ def register():
         },
     }
 )
-def login():
+def login() -> str:
+    """
+    Login a user and return a JWT token
+
+    Returns:
+        str: A message indicating the success or failure of the login
+    """
     try:
         data = request.get_json()
         username = data.get("username")
@@ -102,5 +123,10 @@ def login():
             return jsonify(access_token=access_token), 200
 
         return jsonify({"error": "Invalid credentials"}), 401
+    except KeyError as ke:
+        return jsonify({"error": f"Missing key: {str(ke)}"}), 400
+    except TypeError as te:
+        return jsonify({"error": f"Invalid input format: {str(te)} "}), 400
+    # pylint: disable=broad-exception-caught
     except Exception as e:
         return jsonify({"error": str(e)}), 500
