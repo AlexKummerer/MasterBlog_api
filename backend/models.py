@@ -197,7 +197,7 @@ class Post:
             categories (List[Category], optional): categories of the post. Defaults to None.
             tags (List[Tag], optional): tags of the post. Defaults to None.
         """
-        self.id = post_id
+        self.post_id = post_id
         self.title = title
         self.content = content
         self.author = author
@@ -214,7 +214,7 @@ class Post:
             dict:  A dictionary representation of the post.
         """
         return {
-            "id": self.id,
+            "id": self.post_id,
             "title": self.title,
             "content": self.content,
             "author": self.author,

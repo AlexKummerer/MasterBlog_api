@@ -9,8 +9,8 @@
 from flask import Blueprint, jsonify, request
 from flask_jwt_extended import jwt_required
 from flasgger import swag_from
-from backend.models import PostList, InvalidDataException, PostNotFoundException
-from backend.routes.utils import paginate_results
+from models import PostList, InvalidDataException, PostNotFoundException
+from routes.utils import paginate_results
 
 posts_bp = Blueprint("posts", __name__)
 

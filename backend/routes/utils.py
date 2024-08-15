@@ -2,7 +2,7 @@
 
 from typing import List
 
-from backend.models import Post
+from models import Post
 
 
 def paginate_results(

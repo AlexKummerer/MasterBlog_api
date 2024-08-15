@@ -1,15 +1,45 @@
 """ module for user authentication """
 
-from flask import Blueprint, app, jsonify, request
+from flask import Blueprint, jsonify, request
 from flask_jwt_extended import create_access_token
 from flasgger import swag_from
 from flask_bcrypt import Bcrypt
-from backend.models import User
+from flask_jwt_extended import get_jwt_identity, jwt_required
+
+from models import User
 
 
 auth_bp = Blueprint("auth", __name__)
-bcrypt = Bcrypt(app)
+bcrypt = Bcrypt()
 users = {}
+
+
+@auth_bp.route("/api/user", methods=["GET"])
+@jwt_required()
+@swag_from(
+    {
+        "summary": "Get the current logged-in user's information",
+        "description": "Get the information of the current logged-in user.",
+        "responses": {
+            200: {
+                "description": "User information retrieved successfully",
+                "schema": {
+                    "type": "object",
+                    "properties": {"username": {"type": "string"}},
+                },
+            },
+            401: {"description": "Unauthorized"},
+        },
+    }
+)
+def get_current_user():
+    """
+    Returns the current logged-in user's information.
+    """
+    current_user = (
+        get_jwt_identity()
+    )  # This will return the username stored in the JWT token
+    return jsonify({"username": current_user}), 200
 
 
 @auth_bp.route("/api/register", methods=["POST"])
@@ -118,7 +148,7 @@ def login() -> str:
             return jsonify({"error": "Missing username or password"}), 400
 
         user = users.get(username)
-        if user and user.check_password(password):
+        if user and user.check_password(password, bcrypt=bcrypt):
             access_token = create_access_token(identity=username)
             return jsonify(access_token=access_token), 200
 
