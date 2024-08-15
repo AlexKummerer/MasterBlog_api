@@ -1,37 +1,5 @@
 let authToken = null;
-
-// Function that runs once the window is fully loaded
-window.onload = function () {
-  var savedBaseUrl = localStorage.getItem("apiBaseUrl");
-  if (savedBaseUrl) {
-    document.getElementById("api-base-url").value = savedBaseUrl;
-    loadPosts();
-  }
-};
-
-// Function to handle user registration
-function register() {
-  const baseUrl = document.getElementById("api-base-url").value;
-  const username = document.getElementById("reg-username").value;
-  const password = document.getElementById("reg-password").value;
-
-  fetch(baseUrl + "/register", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ username: username, password: password }),
-  })
-    .then((response) => response.json())
-    .then((data) => {
-      if (data.message) {
-        console.log("Registration successful:", data.message);
-        alert("Registration successful! You can now log in.");
-      } else {
-        console.error("Registration failed:", data.error);
-        alert("Registration failed: " + data.error);
-      }
-    })
-    .catch((error) => console.error("Error:", error));
-}
+let loggedInUsername = null;
 
 function login() {
   const baseUrl = document.getElementById("api-base-url").value;
@@ -73,6 +41,69 @@ function loadPosts() {
   localStorage.setItem("apiBaseUrl", baseUrl);
 
   fetch(baseUrl + "/v1/posts", {
+    headers: { Authorization: "Bearer " + authToken },
+  })
+    .then((response) => response.json())
+    .then((data) => {
+      const postContainer = document.getElementById("post-container");
+      postContainer.innerHTML = "";
+
+      data.results.forEach((post) => {
+        const postDiv = document.createElement("div");
+        postDiv.className = "post";
+        postDiv.innerHTML = `
+                    <h2>${post.title}</h2>
+                    <p>${post.content}</p>
+                    <p><strong>Author:</strong> ${
+                      post.author
+                    } | <strong>Date:</strong> ${new Date(
+          post.date
+        ).toLocaleString()}</p>
+                    <button onclick="deletePost('${post.id}')">Delete</button>`;
+        postContainer.appendChild(postDiv);
+      });
+    })
+    .catch((error) => console.error("Error:", error));
+}
+
+// Function to search posts by a query
+function searchPosts() {
+  const baseUrl = document.getElementById("api-base-url").value;
+  const query = document.getElementById("search-query").value;
+
+  fetch(`${baseUrl}/v1/posts/search?query=${encodeURIComponent(query)}`, {
+    headers: { Authorization: "Bearer " + authToken },
+  })
+    .then((response) => response.json())
+    .then((data) => {
+      const postContainer = document.getElementById("post-container");
+      postContainer.innerHTML = "";
+
+      data.results.forEach((post) => {
+        const postDiv = document.createElement("div");
+        postDiv.className = "post";
+        postDiv.innerHTML = `
+                    <h2>${post.title}</h2>
+                    <p>${post.content}</p>
+                    <p><strong>Author:</strong> ${
+                      post.author
+                    } | <strong>Date:</strong> ${new Date(
+          post.date
+        ).toLocaleString()}</p>
+                    <button onclick="deletePost('${post.id}')">Delete</button>`;
+        postContainer.appendChild(postDiv);
+      });
+    })
+    .catch((error) => console.error("Error:", error));
+}
+
+// Function to sort posts based on a selected criterion
+function sortPosts() {
+  const baseUrl = document.getElementById("api-base-url").value;
+  const sortBy = document.getElementById("sort-by").value;
+  const direction = document.getElementById("sort-direction").value;
+
+  fetch(`${baseUrl}/v1/posts/sort?sort_by=${sortBy}&direction=${direction}`, {
     headers: { Authorization: "Bearer " + authToken },
   })
     .then((response) => response.json())
