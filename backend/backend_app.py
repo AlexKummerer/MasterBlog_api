@@ -1,3 +1,4 @@
+from datetime import UTC, datetime
 import uuid
 import os
 from flask_bcrypt import Bcrypt
@@ -25,6 +26,7 @@ users = {}
 
 # Models
 
+
 class User:
     def __init__(self, username, password):
         self.username = username
@@ -32,6 +34,7 @@ class User:
 
     def check_password(self, password):
         return bcrypt.check_password_hash(self.password, password)
+
 
 class Comment:
     def __init__(self, id, post_id, content):
@@ -42,6 +45,7 @@ class Comment:
     def to_dict(self):
         return {"id": self.id, "post_id": self.post_id, "content": self.content}
 
+
 class Category:
     def __init__(self, id, name):
         self.id = id
@@ -49,6 +53,7 @@ class Category:
 
     def to_dict(self):
         return {"id": self.id, "name": self.name}
+
 
 class Tag:
     def __init__(self, id, name):
@@ -58,17 +63,24 @@ class Tag:
     def to_dict(self):
         return {"id": self.id, "name": self.name}
 
+
 class PostNotFoundException(Exception):
     pass
+
 
 class InvalidDataException(Exception):
     pass
 
+
 class Post:
-    def __init__(self, id, title, content, categories=None, tags=None):
+    def __init__(
+        self, id, title, content, author, date=None, categories=None, tags=None
+    ):
         self.id = id
         self.title = title
         self.content = content
+        self.author = author
+        self.date = date if date else datetime.now(UTC).isoformat()
         self.comments = []
         self.categories = categories if categories else []
         self.tags = tags if tags else []
@@ -78,6 +90,8 @@ class Post:
             "id": self.id,
             "title": self.title,
             "content": self.content,
+            "author": self.author,
+            "date": self.date,
             "comments": [comment.to_dict() for comment in self.comments],
             "categories": [category.to_dict() for category in self.categories],
             "tags": [tag.to_dict() for tag in self.tags],
@@ -98,7 +112,9 @@ class Post:
         self.tags.append(new_tag)
         return new_tag
 
+
 # Utility Functions
+
 
 def paginate_results(results, page, per_page, base_url, query_params=None):
     start = (page - 1) * per_page
@@ -116,25 +132,28 @@ def paginate_results(results, page, per_page, base_url, query_params=None):
 
     return paginated_results, next_url
 
+
 class PostList:
     def __init__(self):
         self.posts = [
-            Post("1", "First post", "This is the first post."),
-            Post("2", "Second post", "This is the second post."),
+            Post("1", "First post", "This is the first post.", "Alice"),
+            Post("2", "Second post", "This is the second post.", "Bob"),
         ]
 
     def get_all(self):
         return [post.to_dict() for post in self.posts]
 
-    def add_post(self, title, content, categories=None, tags=None):
+    def add_post(self, title, content, author, categories=None, tags=None):
         new_id = uuid.uuid4().hex
-        new_post = Post(new_id, title, content, categories, tags)
+        new_post = Post(
+            new_id, title, content, author, categories=categories, tags=tags
+        )
         self.posts.append(new_post)
         return new_post
 
     def sort_posts(self, sort_by=None, direction="asc"):
         if sort_by:
-            if sort_by not in ["title", "content"]:
+            if sort_by not in ["title", "content", "author", "date"]:
                 raise InvalidDataException("Invalid sort_by parameter")
             if direction not in ["asc", "desc"]:
                 raise InvalidDataException("Invalid direction parameter")
@@ -151,14 +170,18 @@ class PostList:
             not data
             or "title" not in data
             or "content" not in data
+            or "author" not in data
             or not data["title"]
             or not data["content"]
+            or not data["author"]
         ):
-            raise InvalidDataException("Missing title or content")
+            raise InvalidDataException("Missing title, content, or author")
+
 
 post_list = PostList()
 
 # Routes
+
 
 @app.route("/api/register", methods=["POST"])
 @swag_from(
@@ -338,6 +361,7 @@ def get_posts():
                     "properties": {
                         "title": {"type": "string", "required": True},
                         "content": {"type": "string", "required": True},
+                        "author": {"type": "string", "required": True},
                     },
                 },
             }
@@ -347,7 +371,7 @@ def get_posts():
                 "description": "Post created successfully",
                 "schema": {"type": "object", "properties": {"id": {"type": "string"}}},
             },
-            400: {"description": "Missing title or content"},
+            400: {"description": "Missing title, content, or author"},
             500: {"description": "Server error"},
         },
     }
@@ -356,7 +380,7 @@ def create_post():
     try:
         data = request.get_json()
         post_list.validate_post_data(data)
-        new_post = post_list.add_post(data["title"], data["content"])
+        new_post = post_list.add_post(data["title"], data["content"], data["author"])
         return jsonify(new_post.to_dict()), 201
     except InvalidDataException as e:
         return jsonify({"error": str(e)}), 400
@@ -408,8 +432,9 @@ def delete_post(post_id):
                     "properties": {
                         "title": {"type": "string", "required": True},
                         "content": {"type": "string", "required": True},
+                        "author": {"type": "string", "required": True},
                     },
-                    "required": ["title", "content"],
+                    "required": ["title", "content", "author"],
                 },
             },
         ],
@@ -430,6 +455,8 @@ def update_post(post_id):
         post_list.validate_post_data(data)
         post.title = data["title"]
         post.content = data["content"]
+        post.author = data["author"]
+        post.date = datetime.utcnow().isoformat()  # Update the date when editing
         return jsonify(post.to_dict()), 200
     except PostNotFoundException as e:
         return jsonify({"error": str(e)}), 404
@@ -497,6 +524,7 @@ def search_posts():
             for post in post_list.posts
             if query.lower() in post.title.lower()
             or query.lower() in post.content.lower()
+            or query.lower() in post.author.lower()
         ]
 
         paginated_results, next_url = paginate_results(
@@ -515,15 +543,15 @@ def search_posts():
 @swag_from(
     {
         "summary": "Sort posts",
-        "description": "Sort posts by a specified field (title or content) and order. Requires JWT authentication.",
+        "description": "Sort posts by a specified field (title, content, author, or date) and order. Requires JWT authentication.",
         "parameters": [
             {
                 "name": "sort_by",
                 "in": "query",
                 "type": "string",
                 "required": False,
-                "enum": ["title", "content"],
-                "description": "Field to sort by (title or content)",
+                "enum": ["title", "content", "author", "date"],
+                "description": "Field to sort by (title, content, author, or date)",
             },
             {
                 "name": "direction",
