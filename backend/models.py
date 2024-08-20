@@ -78,7 +78,7 @@ class Comment:
             post_id (str): id of the post
             content (str): content of the comment
         """
-        self.id: str = comment_id
+        self.comment_id: str = comment_id
         self.post_id: str = post_id
         self.content: str = content
 
@@ -89,7 +89,7 @@ class Comment:
         Returns:
             dict: A dictionary representation of the comment.
         """
-        return {"id": self.id, "post_id": self.post_id, "content": self.content}
+        return {"id": self.comment_id, "post_id": self.post_id, "content": self.content}
 
     def __str__(self):
         return self.content
@@ -108,7 +108,7 @@ class Category:
             id (str): id of the category
             name (str): name of the category
         """
-        self.id = category_id
+        self.category_id = category_id
         self.name = name
 
     def to_dict(self) -> dict:
@@ -118,7 +118,7 @@ class Category:
         Returns:
             dict: A dictionary representation of the category.
         """
-        return {"id": self.id, "name": self.name}
+        return {"id": self.category_id, "name": self.name}
 
     def __str__(self):
         return self.name
@@ -135,7 +135,7 @@ class Tag:
             id (str):  id of the tag
             name (str): name of the tag
         """
-        self.id = tag_id
+        self.tag_id = tag_id
         self.name = name
 
     def to_dict(self) -> dict:
@@ -144,7 +144,7 @@ class Tag:
         Returns:
             dict: A dictionary representation of the tag.
         """
-        return {"id": self.id, "name": self.name}
+        return {"id": self.tag_id, "name": self.name}
 
     def __str__(self):
         return self.name
