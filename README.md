@@ -42,14 +42,8 @@ project_root/
 
 ### Backend Setup
 
-1. **Navigate to the Backend Directory:**
 
-   ```bash
-   cd backend
-
-   ```
-
-2. **Create and Activate a Virtual Environment:**
+1. **Create and Activate a Virtual Environment:**
 
    ```bash
    python -m venv venv
@@ -57,12 +51,20 @@ project_root/
 
    ```
 
-3. **Install Dependencies:**
+2. **Install Dependencies:**
 
    ```bash
    pip install -r ../requirements.txt
 
    ```
+
+3. **Navigate to the Backend Directory:**
+
+   ```bash
+   cd backend
+
+   ```
+
 
 4. **Run the Flask Backend Application:**
 
@@ -152,10 +154,11 @@ Install dependencies using the command:
 Contributions are welcome! Please open an issue or submit a pull request for any improvements or bug fixes.
 
 ## License
+
 This project is licensed under the MIT License. See the LICENSE file for details.
 
 
-
 ## Contact
+
 For questions or issues, please contact developer@alexkummerer.de
 

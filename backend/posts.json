@@ -1,6 +1,6 @@
 [
     {
-        "id": "684064a909a144eda75c36e0a2ebd196",
+        "post_id": "684064a909a144eda75c36e0a2ebd196",
         "title": "The awkward",
         "content": "The awkward content",
         "author": "Ich",
@@ -10,7 +10,7 @@
         "tags": []
     },
     {
-        "id": "17ea93e9b6074f469465d75a64c1c637",
+        "post_id": "17ea93e9b6074f469465d75a64c1c637",
         "title": "Love",
         "content": "Liebeserkl\u00e4rung",
         "author": "Your Name",
@@ -20,7 +20,7 @@
         "tags": []
     },
     {
-        "id": "ed7acb4bc8c642fc98ad84ac8de17da5",
+        "post_id": "ed7acb4bc8c642fc98ad84ac8de17da5",
         "title": "dwad",
         "content": "dwadwad",
         "author": "Alex",

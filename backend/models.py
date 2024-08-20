@@ -214,7 +214,7 @@ class Post:
             dict:  A dictionary representation of the post.
         """
         return {
-            "id": self.post_id,
+            "post_id": self.post_id,
             "title": self.title,
             "content": self.content,
             "author": self.author,
