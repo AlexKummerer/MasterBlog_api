@@ -1,6 +1,29 @@
 let authToken = null;
 let loggedInUsername = null;
 
+function register() {
+  const baseUrl = document.getElementById("api-base-url").value;
+  const username = document.getElementById("reg-username").value;
+  const password = document.getElementById("reg-password").value;
+
+  fetch(baseUrl + "/register", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ username: username, password: password }),
+  })
+    .then((response) => response.json())
+    .then((data) => {
+      if (data.access_token) {
+        authToken = data.access_token;
+        console.log("Registration successful");
+      } else {
+        console.error("Registration failed:", data.error);
+        alert("Registration failed: " + data.error);
+      }
+    })
+    .catch((error) => console.error("Error:", error));
+}
+
 function login() {
   const baseUrl = document.getElementById("api-base-url").value;
   const username = document.getElementById("username").value;
