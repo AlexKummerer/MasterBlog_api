@@ -5,6 +5,9 @@ function register() {
   const baseUrl = document.getElementById("api-base-url").value;
   const username = document.getElementById("reg-username").value;
   const password = document.getElementById("reg-password").value;
+  console.log("Registering user:", username);
+  console.log("API base URL:", baseUrl);
+  console.log("password:", password);
 
   fetch(baseUrl + "/register", {
     method: "POST",
@@ -13,13 +16,7 @@ function register() {
   })
     .then((response) => response.json())
     .then((data) => {
-      if (data.access_token) {
-        authToken = data.access_token;
-        console.log("Registration successful");
-      } else {
-        console.error("Registration failed:", data.error);
-        alert("Registration failed: " + data.error);
-      }
+      data.message;
     })
     .catch((error) => console.error("Error:", error));
 }
