@@ -16,7 +16,12 @@ function register() {
   })
     .then((response) => response.json())
     .then((data) => {
-      data.message;
+      if (data.message) {
+        alert(data.message);
+      } else {
+        console.error(data.error);
+        alert(data.error);
+      }
     })
     .catch((error) => console.error("Error:", error));
 }
